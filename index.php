@@ -1,5 +1,5 @@
 <?php
-
+include("cifrado.php");
 include("conexion.php");
 /*=================
 CORS
@@ -33,9 +33,20 @@ function manejarUsuarios($pdo, $method, $params) {
             $sql -> execute();
             $sql -> setFetchMode(PDO::FETCH_ASSOC);
     
+            $usuario = $sql->fetch();
+
+            if ($usuario) {
+                // Desencriptar la contraseña
+                $usuario['contrasena'] = decryptPassword($usuario['contrasena']);
+            }
+    
             header('HTTP/1.1 200 OK');
-            echo json_encode($sql -> fetchAll());
+            echo json_encode($usuario);
             exit;
+
+           // header('HTTP/1.1 200 OK');
+           // echo json_encode($sql -> fetchAll());
+            // exit;
     
         }else{      
             $sql = $pdo -> prepare('SELECT * FROM usuario');
@@ -50,6 +61,8 @@ function manejarUsuarios($pdo, $method, $params) {
     }
     //Registrar datos -- metodo POST
     if($_SERVER['REQUEST_METHOD'] == 'POST'){
+
+        $params->contrasena = encryptPassword($params->contrasena);
         $sql = "INSERT INTO usuario (nombres, apellidos, email, num_telefono,num_documento, contrasena, genero, foto, activo, fecha_nacimiento, id_rol, id_tipo_doc) 
         VALUES (:nombres, :apellidos, :email, :num_telefono,:num_documento, :contrasena, :genero, :foto, :activo, :fecha_nacimiento, :id_rol, :id_tipo_doc)";
         $stmt = $pdo -> prepare($sql);
@@ -81,6 +94,7 @@ function manejarUsuarios($pdo, $method, $params) {
     
     //Actualizar datos -- metodo PUT
     if($_SERVER['REQUEST_METHOD'] == 'PUT'){
+        $params->contrasena = encryptPassword($params->contrasena);
         $sql = 'UPDATE usuario SET nombres=:nombres, apellidos=:apellidos, email=:email, num_telefono=:num_telefono, num_documento=:num_documento, contrasena=:contrasena, genero=:genero, foto=:foto, activo=:activo, fecha_nacimiento=:fecha_nacimiento, id_rol=:id_rol, id_tipo_doc=:id_tipo_doc WHERE id=:id';
         $stmt = $pdo -> prepare($sql);
     
@@ -142,9 +156,10 @@ function manejarRoles($pdo, $method, $params) {
 
     //Registrar datos -- metodo POST
     if ($method == 'POST') {
-        $sql = "INSERT INTO roles (descripcion) VALUES (:descripcion)";
+        $sql = "INSERT INTO roles (descripcion,activo) VALUES (:descripcion,:activo)";
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':descripcion', $params->descripcion);
+        $stmt->bindValue(':activo', $params->activo);
         $stmt->execute();
         $idPost = $pdo->lastInsertId();
 
@@ -160,9 +175,10 @@ function manejarRoles($pdo, $method, $params) {
 
     //Actualizar datos -- metodo PUT
     if ($method == 'PUT') {
-        $sql = 'UPDATE roles SET descripcion=:descripcion WHERE id=:id';
+        $sql = 'UPDATE roles SET descripcion=:descripcion, activo=:activo WHERE id=:id';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':descripcion', $params->descripcion);
+        $stmt->bindValue(':activo', $params->activo);
         $stmt->bindValue(':id', $_GET['id']);
         $stmt->execute();
 
@@ -210,9 +226,10 @@ function manejarDocumentos($pdo, $method, $params) {
 
     //Registrar datos -- metodo POST
     if ($method == 'POST') {
-        $sql = "INSERT INTO tipo_documentos (descripcion) VALUES (:descripcion)";
+        $sql = "INSERT INTO tipo_documentos (descripcion, activo) VALUES (:descripcion, :activo)";
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':descripcion', $params->descripcion);
+        $stmt->bindValue(':activo', $params->activo);
         $stmt->execute();
         $idPost = $pdo->lastInsertId();
 
@@ -228,9 +245,10 @@ function manejarDocumentos($pdo, $method, $params) {
 
     //Actualizar datos -- metodo PUT
     if ($method == 'PUT') {
-        $sql = 'UPDATE tipo_documentos SET descripcion=:descripcion WHERE id=:id';
+        $sql = 'UPDATE tipo_documentos SET descripcion=:descripcion, activo=:activo WHERE id=:id';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':descripcion', $params->descripcion);
+        $stmt->bindValue(':activo', $params->activo);
         $stmt->bindValue(':id', $_GET['id']);
         $stmt->execute();
 
@@ -264,7 +282,7 @@ function loginUsuario($pdo, $params) {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // Verificar la contraseña
-        if ($user && $password === $user['contrasena']) {
+        if ($user && decryptPassword($user['contrasena']) === $password)  {
             $token = bin2hex(random_bytes(16));
             header('HTTP/1.1 200 OK');
             echo json_encode([
